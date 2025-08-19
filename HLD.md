@@ -36,27 +36,27 @@ classDiagram
         +start_date: date
         +end_date: date
         +days: int (computed)
-        +status: enum('Pending','Approved','Rejected')
+        +status: enum(Pending, Approved, Rejected)
         +rejection_reason: str
         +created_at: datetime
         +updated_at: datetime
     }
 
     class RegisterView {
-        +POST(email, password, is_hr) -> access_token
+        +POST_register(email, password, is_hr) -> token
     }
 
     class LoginView {
-        +POST(email, password) -> access_token
+        +POST_login(email, password) -> token
     }
 
     class EmployeeAPI {
-        +"GET /employees/"
-        +"POST /employees/"
-        +"GET /employees/{id}/"
-        +"PATCH /employees/{id}/"
-        +"DELETE /employees/{id}/"
-        +"GET /employees/me/"
+        +GET_employees()
+        +POST_employees()
+        +GET_employee_by_id(id)
+        +PATCH_employee(id)
+        +DELETE_employee(id)
+        +GET_employee_me()
     }
 
     class LeaveRequestViewSet {
@@ -64,7 +64,7 @@ classDiagram
         +create(start_date, end_date)
         +partial_update(id, ...)
         +destroy(id)
-        +get_queryset() -> HR: all, Emp: own
+        +get_queryset()
     }
 
     CustomUser "1" <-- "1" Employee : one-to-one
