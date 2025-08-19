@@ -51,26 +51,6 @@ def Login(request):
         print(e)
         return Response({"details":"User doesn't Exist"},status=status.HTTP_404_NOT_FOUND)
 
-# class EmployeesAPIViewSet(ModelViewSet):
-#     queryset = Employee.objects.all()
-#     serializer_class = EmployeeSerializer
-#     permission_classes = [IsAuthenticated, isHR]
-#     def create(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         if not serializer.is_valid():
-#             print(serializer.errors)
-#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-#         user_email = serializer.validated_data['user']
-#         try:
-#             user = User.objects.get(email=user_email)
-#         except User.DoesNotExist:
-#             return Response({"details": "User does not exist"}, status=status.HTTP_404_NOT_FOUND)
-        
-#         if Employee.objects.filter(user=user).exists():
-#             return Response({"details": "Employee with this user already exists"}, status=status.HTTP_400_BAD_REQUEST)
-        
-#         employee = serializer.save(user=user)
-#         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 @api_view(['GET','POST'])
 @permission_classes([IsAuthenticated,isHR])
@@ -95,18 +75,21 @@ def EmployeeList(request):
     serializer = EmployeeSerializer(employees, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
-@api_view(['GET', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated,isHRorOwnuser])
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
 def EmployeeUpdateordelete(request, pk):
+    
     try:
         employee = Employee.objects.get(pk=pk)
+        if not request.user.is_hr and employee.user != request.user:
+            return Response({"details": "You do not have permission to access this employee"}, status=status.HTTP_403_FORBIDDEN)
     except Employee.DoesNotExist:
         return Response({"details": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
-    if request.method == 'PUT':
-        leavestatus = request.data.get('status', None)
-        if leavestatus and not request.user.is_hr:
-            return Response({"details": "Only HR can update employee status"}, status=status.HTTP_403_FORBIDDEN)
-        
+    if (employee.user != request.user) and not ( request.user.is_hr) :
+        return Response({"details": "You do not have permission to access this employee"}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == 'PATCH':
+        if not request.user.is_hr:
+            return Response({"details": "Only HR can update employee information"}, status=status.HTTP_403_FORBIDDEN)
         serializer = EmployeeSerializer(employee, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -149,34 +132,55 @@ class LeaveRequestViewSet(ModelViewSet):
             return Response({"details": "Leave start date cannot be before date of joining"}, status=status.HTTP_400_BAD_REQUEST)
         serializer.save(employee=employee, days=days)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    def patch(self, request, *args, **kwargs):
-        permission_classes= [isHRorOwnuser]
-        pk= self.kwargs.get('pk')
-        serializer = self.get_serializer(data=request.data, partial=True)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        leave_request = LeaveRequest.objects.filter(pk=pk).first()
-        if not leave_request:
+    def partial_update(self, request, *args, **kwargs):
+        record= self.get_object()
+        if not record:
             return Response({"details": "Leave request not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        if not request.user.is_hr and leave_request.employee.user != request.user:
-            return Response({"details": "You do not have permission to update this leave request"}, status=status.HTTP_403_FORBIDDEN)
-        leave_request = LeaveRequest.objects.get(pk=pk)
-        if leave_request.status != 'Pending':
-            return Response({"details": "Cannot update a request that is not pending"}, status=status.HTTP_400_BAD_REQUEST)
-        if serializer.validated_data.get('status') == 'Approved':
-            leave_request.employee.leave_balance -= leave_request.days
-            leave_request.employee.save()
-        elif serializer.validated_data.get('status') == 'Rejected':
-            leave_request.rejection_reason = serializer.validated_data.get('rejection_reason', '')
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
+        if record.status != 'Pending':
+            return Response({"details": "Cannot update a leave request that is not pending"}, status=status.HTTP_400_BAD_REQUEST)
+        if request.user.is_hr :
+            allowed_fields=['status', 'rejection_reason']
+            data={ k:val for k,val in request.data.items() if k in allowed_fields}
+            
+            if data.get('status') == 'Approved':
+                record.employee.leave_balance -= record.days if record.days else 0
+                record.employee.save()
+            elif data.get('status') == 'Rejected':
+                record.rejection_reason = data.get('rejection_reason', '')
+            else:
+                return Response({"details": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+            record.status = data.get('status', record.status)
+            record.save()
+            serializer=self.get_serializer(record)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            if "status" in request.data:
+                return Response({"details": "Employees cannot change status"}, 
+                                status=status.HTTP_403_FORBIDDEN)
+
+            serializer = self.get_serializer(record, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            days= (serializer.validated_data['end_date'] - serializer.validated_data['start_date']).days + 1
+            if days <= 0:
+                return Response({"details": "Invalid date range"}, status=status.HTTP_400_BAD_REQUEST)
+            if record.employee.leave_balance < days:
+                return Response({"details": "Insufficient leave balance"}, status=status.HTTP_400_BAD_REQUEST)
+            if serializer.validated_data['start_date'] < record.employee.date_of_joining:
+                return Response({"details": "Leave start date cannot be before date of joining"}, status=status.HTTP_400_BAD_REQUEST)
+            serializer.save(days=days)
+            return Response(serializer.data, status=status.HTTP_200_OK)
     def destroy(self, request, *args, **kwargs):
-        pk = self.kwargs.get('pk')
-        leave_request = LeaveRequest.objects.get(pk=pk)
-        if leave_request.status != 'Pending':
-            return Response({"details": "Cannot delete a request that is not pending"}, status=status.HTTP_400_BAD_REQUEST)
-        leave_request.delete()
-        return Response({"details": "Leave request deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-        
+        try:
+            record = self.get_object()
+        except LeaveRequest.DoesNotExist:
+            return Response({"details": "Leave request not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.user.is_hr or record.employee.user == request.user:
+            if record.status != 'Pending':
+                return Response({"details": "Cannot delete a leave request that is not pending"},
+                                status=status.HTTP_400_BAD_REQUEST)
+            record.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        return Response({"details": "You do not have permission to delete this leave request"},
+                        status=status.HTTP_403_FORBIDDEN)

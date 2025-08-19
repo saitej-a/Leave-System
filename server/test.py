@@ -14,11 +14,15 @@ headers = {
     'Authorization':f'Bearer {acc_token}'
 }
 data={
-    'user': 'ankamsaiteja27+123@gmail.com',
-    'department': 'IT',
-    'position': 'Software Engineer',
-    'date_of_joining': '2023-10-01',
+    # 'user': 'ankamsaiteja27+123@gmail.com',
+    # 'department': 'IT',
+    # 'position': 'Software Engineer',
+    # 'date_of_joining': '2023-10-01',
     'leave_balance': 20
 }
-response = re.post('http://127.0.0.1:8000/api/employees/',headers=headers,data=json.dumps(data))
+data2={'start_date': '2025-08-18', 'end_date': '2025-08-20', 'reason': 'Vacation'}
+data3={'status': 'Approved', 'rejection_reason': 'Not applicable'}
+response = re.patch('http://127.0.0.1:8000/api/leaverequests/1/',headers=headers,data=json.dumps(data3))
+# response=re.patch('http://127.0.0.1:8000/api/employees/1/',headers=headers,data=json.dumps(data))
 print(response.json())
+# ,data=json.dumps({"status": "Approved"})
