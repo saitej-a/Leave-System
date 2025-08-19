@@ -51,12 +51,12 @@ classDiagram
     }
 
     class EmployeeAPI {
-        +GET /employees/
-        +POST /employees/
-        +GET /employees/{id}/
-        +PATCH /employees/{id}/
-        +DELETE /employees/{id}/
-        +GET /employees/me/
+        +"GET /employees/"
+        +"POST /employees/"
+        +"GET /employees/{id}/"
+        +"PATCH /employees/{id}/"
+        +"DELETE /employees/{id}/"
+        +"GET /employees/me/"
     }
 
     class LeaveRequestViewSet {
@@ -73,6 +73,7 @@ classDiagram
     LoginView ..> CustomUser : authenticates
     EmployeeAPI ..> Employee : CRUD
     LeaveRequestViewSet ..> LeaveRequest : CRUD
+
 ```
 
 ---
